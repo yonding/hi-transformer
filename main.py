@@ -15,6 +15,8 @@ def train_one_epoch(args, model, train_loader, optimizer):
     mse_loss = nn.MSELoss()
 
     train_loss = 0
+    train_cross_entropy_loss = 0
+    train_mse_loss = 0
 
     model.train()
     for batch_idx, (missing_data, complete_data, y) in enumerate(train_loader):
@@ -27,13 +29,16 @@ def train_one_epoch(args, model, train_loader, optimizer):
         optimizer.zero_grad()
         y_pred, recon_data = model(missing_data)
 
-        loss = cross_entropy_loss(y_pred, y) + mse_loss(recon_data, complete_data) * 10
+        loss = cross_entropy_loss(y_pred, y) + mse_loss(recon_data, complete_data) * args.mse_rate
         loss.backward()
+
+        train_cross_entropy_loss += cross_entropy_loss(y_pred, y).item()
+        train_mse_loss += mse_loss(recon_data, complete_data).item()
         train_loss += loss.item()
     
         optimizer.step()
     
-    return train_loss / len(train_loader)
+    return train_loss / len(train_loader), train_mse_loss / len(train_loader), train_cross_entropy_loss / len(train_loader)
 
 
 @torch.no_grad()
@@ -42,6 +47,8 @@ def valid_model(args, model, val_loader):
     mse_loss = nn.MSELoss()
 
     val_loss = 0
+    val_mse_loss = 0
+    val_cross_entropy_loss = 0
 
     model.eval()
     for batch_idx, (missing_data, complete_data, y) in enumerate(val_loader):
@@ -53,30 +60,37 @@ def valid_model(args, model, val_loader):
 
         y_pred, recon_data = model(missing_data)
 
-        loss = cross_entropy_loss(y_pred, y) + mse_loss(recon_data, complete_data) * args.num_features
+        loss = cross_entropy_loss(y_pred, y) + mse_loss(recon_data, complete_data) * args.mse_rate
 
+        val_mse_loss += mse_loss(recon_data, complete_data).item()
+        val_cross_entropy_loss += cross_entropy_loss(y_pred, y).item()
         val_loss += loss.item()
-        if batch_idx==3:
+
+        # Print samples
+        if args.current_epoch % args.print_period == 0 and batch_idx == 1:
             print(f"\nM: {missing_data[:1, :5]}")
             print(f"R: {recon_data[:1, :5]}")
             print(f"C: {complete_data[:1, :5]}")
     
-    return val_loss / len(val_loader)
+    return val_loss / len(val_loader), val_mse_loss / len(val_loader), val_cross_entropy_loss / len(val_loader)
 
 
 def train_and_validate(args, model, train_loader, val_loader, optimizer):
     
-    patience = 100
+    patience = 1000
     best_loss = 1e9
     best_epoch = 0
     counter = 0    
 
     for epoch in tqdm(range(args.epochs)):
+
+        args.current_epoch = epoch
+
         model.train()
-        train_loss = train_one_epoch(args, model, train_loader, optimizer)
+        train_loss, train_mse_loss, train_cross_entropy_loss = train_one_epoch(args, model, train_loader, optimizer)
 
         model.eval()
-        val_loss = valid_model(args, model, val_loader)
+        val_loss, val_mse_loss, val_cross_entropy_loss = valid_model(args, model, val_loader)
 
         if val_loss < best_loss:
             best_loss = val_loss
@@ -89,7 +103,9 @@ def train_and_validate(args, model, train_loader, val_loader, optimizer):
         if counter > patience:
             break
 
-        print(f'Epoch: {epoch}, Train loss: {train_loss}, val loss: {val_loss}')
+        print(f'Epoch: {epoch}')
+        print(f'[TRAIN] Total loss: {train_loss}, MSE: {train_mse_loss}, CE: {train_cross_entropy_loss}')
+        print(f'[VALID] Total loss: {val_loss}, MSE: {val_mse_loss}, CE: {val_cross_entropy_loss}')
 
     print(f'Best epoch: {best_epoch}, Best Val loss: {best_loss}')
 
@@ -100,14 +116,11 @@ def test(args, model, test_loader):
     model.load_state_dict(torch.load(f'best_{args.model_name}.pth'))
 
     model.eval()
-    for threshold in range(10, 100, 10):
-        args.threshold = threshold
-        test_loss = valid_model(args, model, test_loader)
-        print('===========================================')
-        print(f'model: {args.model_name}')
-        print(f'Threshold: {threshold}')
-        print(f'Test loss: {test_loss}')
-    print('===========================================')
+    test_loss, test_mse_loss, test_cross_entropy_loss = valid_model(args, model, test_loader)
+    print("========================= TEST RESULT =========================")
+    print(f'[TEST] Total loss: {test_loss}, MSE: {test_mse_loss}, CE: {test_cross_entropy_loss}')
+    print("===============================================================")
+        
 
 
 def main(args):

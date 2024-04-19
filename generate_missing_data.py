@@ -26,7 +26,7 @@ def generate_missing_data(args, X_df, y_df):
     elif args.missing_pattern == 'multiple':
         features = [col for col in complete_df.columns if col != "target"]
         for index, row in complete_df.iterrows():
-            for r in range(1, args.max_remove_count + 1):  
+            for r in range(args.min_remove_count, args.max_remove_count + 1):  
                 for subset in itertools.combinations(features, r):
                     new_X_row = row.copy()
                     new_X_row[list(subset)] = 0
@@ -37,7 +37,7 @@ def generate_missing_data(args, X_df, y_df):
         features = [col for col in complete_df.columns if col != "target"]
         feature_combinations = []
 
-        for r in range(1, args.max_remove_count + 1):
+        for r in range(args.min_remove_count, args.max_remove_count + 1):
             feature_combinations += list(itertools.combinations(features, r))
             
         for index, row in complete_df.iterrows():

@@ -2,8 +2,6 @@ import math
 import torch
 import torch.nn as nn
 from torch.nn import TransformerEncoder, TransformerEncoderLayer
-import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
 
 class TabularTransformer(nn.Module):
     def __init__(self, args):
